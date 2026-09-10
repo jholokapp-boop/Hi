@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Local AI Chat - Browser ONNX</title>
+
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100vh;
+  background: #08090d;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.app {
+  max-width: 600px;
+  width: 100%;
+  margin: auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #1f2330;
+}
+
+.logo {
+  width: 50px;
+  height: 50px;
+  margin: auto;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  background: linear-gradient(135deg, #6c5ce7, #00cec9);
+  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.3);
+}
+
+h1 {
+  font-size: 20px;
+  margin-top: 8px;
+}
+
+.sub {
+  color: #9da1ad;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Setup Card */
+.card {
+  background: #11131a;
+  border: 1px solid #252936;
+  border-radius: 18px;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: bold;
+  color: white;
+  background: #252a38;
+  cursor: pointer;
+}
+
+button.primary {
+  background: linear-gradient(135deg, #6c5ce7, #00a8ff);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.progress {
+  height: 6px;
+  background: #242733;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #6c5ce7, #00cec9);
+  transition: width 0.2s;
+}
+
+.status {
+  color: #aeb3c0;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* Chat Container */
+.chat-box {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #6c5ce7, #00a8ff);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.bot {
+  align-self: flex-start;
+  background: #11131a;
+  border: 1px solid #252936;
+  color: #e1e4ed;
+  border-bottom-left-radius: 4px;
+}
+
+/* Input Area */
+.input-card {
+  background: #11131a;
+  border: 1px solid #252936;
+  border-radius: 18px;
+  padding: 6px 6px 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="text"] {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fff;
+  font-size: 14px;
+}
+
+.send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 0;
+  background: linear-gradient(135deg, #6c5ce7, #00cec9);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+</style>
+
+</head>
+<body>
+
+<div class="app">
+
+  <div class="header">
+    <div class="logo">⚡</div>
+    <h1>Local Bangla AI</h1>
+    <div class="sub">100% In-Browser Local ONNX AI (No API Key Required)</div>
+  </div>
+
+  <div class="card" id="setupCard">
+    <button id="loadBtn" class="primary">⬇️ Download AI Chat Model (~350MB)</button>
+    <div class="progress">
+      <div class="bar" id="bar"></div>
+    </div>
+    <div class="status" id="status">AI মডেল এখনো ডাউনলোড হয়নি।</div>
+  </div>
+
+  <div class="chat-box" id="chatBox">
+    <div class="msg bot">
+      নমস্কার! মডেল ডাউনলোড হয়ে গেলে আমি সরাসরি আপনার ফোনে/ব্রাউজারে চ্যাট করার জন্য প্রস্তুত হব।
+    </div>
+  </div>
+
+  <div class="input-card">
+    <input type="text" id="userInput" placeholder="মডেল ডাউনলোড করে বার্তা লিখুন..." disabled>
+    <button class="send-btn" id="sendBtn" disabled>➔</button>
+  </div>
+
+</div>
+
+<!-- Transformers.js (ONNX Runtime Web Integration) -->
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+// Don't look for local files on server
+env.allowLocalModels = false;
+
+const loadBtn = document.getElementById("loadBtn");
+const statusEl = document.getElementById("status");
+const bar = document.getElementById("bar");
+const chatBox = document.getElementById("chatBox");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
+const setupCard = document.getElementById("setupCard");
+
+let generator = null;
+
+// Download and Prepare Local AI
+loadBtn.onclick = async () => {
+  loadBtn.disabled = true;
+  statusEl.textContent = "AI Model লোড ও প্রসেস করা হচ্ছে...";
+  bar.style.width = "10%";
+
+  try {
+    // Loads Qwen1.5-0.5B-Chat quantized ONNX model directly in browser
+    generator = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat', {
+      progress_callback: (progress) => {
+        if (progress.status === 'progress') {
+          const percent = progress.progress.toFixed(0);
+          bar.style.width = percent + "%";
+          statusEl.textContent = `ডাউনলোড হচ্ছে: ${percent}%`;
+        }
+      }
+    });
+
+    bar.style.width = "100%";
+    statusEl.textContent = "✓ AI মডেল প্রস্তুত! এখন চ্যাট করতে পারেন।";
+    
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.placeholder = "এখানে বাংলায় বার্তা লিখুন...";
+    
+    setTimeout(() => setupCard.style.display = "none", 2000);
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "মডেল লোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।";
+    loadBtn.disabled = false;
+  }
+};
+
+function appendMessage(text, role) {
+  const msg = document.createElement("div");
+  msg.className = `msg ${role}`;
+  msg.innerText = text;
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  return msg;
+}
+
+// Generate Chat Response
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text || !generator) return;
+
+  userInput.value = "";
+  userInput.disabled = true;
+  sendBtn.disabled = true;
+
+  appendMessage(text, "user");
+  const botMsg = appendMessage("চিন্তা করছে...", "bot");
+
+  try {
+    // Prompt structure
+    const prompt = `<|im_start|>system\nYou are a helpful AI assistant that replies concisely in Bengali.<|im_end|>\n<|im_start|>user\n${text}<|im_end|>\n<|im_start|>assistant\n`;
+
+    const output = await generator(prompt, {
+      max_new_tokens: 128,
+      temperature: 0.7,
+      do_sample: true,
+      return_full_text: false
+    });
+
+    let reply = output[0].generated_text.replace(/<\|im_end\|>/g, "").trim();
+    botMsg.innerText = reply || "কোনো উত্তর পাওয়া যায়নি।";
+
+  } catch (e) {
+    console.error(e);
+    botMsg.innerText = "উত্তর তৈরিতে সমস্যা হয়েছে।";
+  }
+
+  userInput.disabled = false;
+  sendBtn.disabled = false;
+  userInput.focus();
+}
+
+sendBtn.onclick = sendMessage;
+userInput.onkeydown = (e) => {
+  if (e.key === "Enter") sendMessage();
+};
+</script>
+
+</body>
+</html>
